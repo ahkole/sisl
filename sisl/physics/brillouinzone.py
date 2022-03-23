@@ -1397,6 +1397,7 @@ class MonkhorstPack(BrillouinZone):
         self._size = size # vector
         self._centered = centered
         self._trs = i_trs
+        self._k_vol = np.full((self._k.shape[0], 3), self._size / self._diag)
 
     def __str__(self):
         """ String representation of MonkhorstPack """
@@ -1753,18 +1754,6 @@ class MonkhorstPack(BrillouinZone):
         if not isinstance(mp, MonkhorstPack):
             raise ValueError("Object 'mp' is not a MonkhorstPack object")
 
-        # We can easily figure out the BZ that each k-point is averaging
-        k_vol = self._size / self._diag
-        # Compare against the size of this one
-        # Since we can remove more than one k-point, we require that the
-        # size of the replacement MP is an integer multiple of the
-        # k-point volumes.
-        k_int = mp._size / k_vol
-        if not np.allclose(np.rint(k_int), k_int):
-            raise SislError(f"{self.__class__.__name__}.reduce could not replace k-point, BZ "
-                            "volume replaced is not equivalent to the inherent k-point volume.")
-        k_int = np.rint(k_int)
-
         # the size of the k-points that will be added
         dk = (mp._size / 2).reshape(1, 3)
 
@@ -1799,6 +1788,18 @@ class MonkhorstPack(BrillouinZone):
             displ_nk = 1
         else:
             displ_nk = len(displacement)
+
+        # Figure out the BZ that each k-point is averaging
+        k_vol = self._k_vol[idx, :]
+        # Compare against the size of this one
+        # Since we can remove more than one k-point, we require that the
+        # size of the replacement MP is an integer multiple of the
+        # k-point volumes.
+        k_int = mp._size / k_vol
+        if not np.allclose(np.rint(k_int), k_int):
+            raise SislError(f'{self.__class__.__name__}.reduce could not replace k-point, BZ '
+                            'volume replaced is not equivalent to the inherent k-point volume.')
+        k_int = np.rint(k_int)
 
         # Now we have the k-points we need to remove
         # Figure out if the total weight is consistent
@@ -1835,6 +1836,7 @@ class MonkhorstPack(BrillouinZone):
             self._k = np.concatenate((np.delete(self._k, idx, axis=0),
                                       (mp.k + displacement.reshape(-1, 1, 3)).reshape(-1, 3)), axis=0)
         self._w = np.concatenate((np.delete(self._w, idx), np.tile(mp._w * weight_factor, displ_nk)))
+        self._k_vol = np.concatenate((np.delete(self._k_vol, idx), np.tile(mp._k_vol, (displ_nk, 1))), axis=0)
 
 
 @set_module("sisl.physics")
