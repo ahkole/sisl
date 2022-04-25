@@ -1834,9 +1834,9 @@ class MonkhorstPack(BrillouinZone):
             self._k = np.concatenate((np.delete(self._k, idx, axis=0), mp._k), axis=0)
         else:
             self._k = np.concatenate((np.delete(self._k, idx, axis=0),
-                                      (mp.k + displacement.reshape(-1, 1, 3)).reshape(-1, 3)), axis=0)
+                                      mp.in_primitive(mp.k + displacement.reshape(-1, 1, 3)).reshape(-1, 3)), axis=0)
         self._w = np.concatenate((np.delete(self._w, idx), np.tile(mp._w * weight_factor, displ_nk)))
-        self._k_vol = np.concatenate((np.delete(self._k_vol, idx), np.tile(mp._k_vol, (displ_nk, 1))), axis=0)
+        self._k_vol = np.concatenate((np.delete(self._k_vol, idx, axis=0), np.tile(mp._k_vol, (displ_nk, 1))), axis=0)
 
 
 @set_module("sisl.physics")
