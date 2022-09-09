@@ -529,7 +529,7 @@ class outSileSiesta(SileSiesta):
             return _a.arrayd(moments)
         return moments
 
-    @sile_fh_open()
+    @sile_fh_open(True)
     def read_energy(self):
         """ Reads the final energy distribution
 

@@ -1,7 +1,7 @@
 # This Source Code Form is subject to the terms of the Mozilla Public
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at https://mozilla.org/MPL/2.0/.
-from ..sile import add_sile
+from ..sile import add_sile, sile_fh_open
 from .sile import SileSiesta, SileCDFSiesta
 
 from sisl._internal import set_module
@@ -23,11 +23,11 @@ class ionxmlSileSiesta(SileSiesta):
 
     Note that the ``ion`` files are equivalent to the ``ion.xml`` files.
     """
-
+    @sile_fh_open(True)
     def read_basis(self):
         """ Returns data associated with the ion.xml file """
         # Get the element-tree
-        root = xml_parse(self.file).getroot()
+        root = xml_parse(self.fh).getroot()
 
         # Get number of orbitals
         label = root.find('label').text.strip()

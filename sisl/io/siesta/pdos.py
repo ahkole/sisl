@@ -3,7 +3,7 @@
 # file, You can obtain one at https://mozilla.org/MPL/2.0/.
 import numpy as np
 
-from ..sile import add_sile, get_sile
+from ..sile import add_sile, get_sile, sile_fh_open
 from .sile import SileSiesta
 
 from sisl._internal import set_module
@@ -38,10 +38,11 @@ class pdosSileSiesta(SileSiesta):
         """ Read the geometry with coordinates and correct orbital counts """
         return self.read_data()[0]
 
+    @sile_fh_open(True)
     def read_fermi_level(self):
         """ Returns the fermi-level """
         # Get the element-tree
-        root = xml_parse(self.file).getroot()
+        root = xml_parse(self.fh).getroot()
 
         # Try and find the fermi-level
         Ef = root.find('fermi_energy')
@@ -49,6 +50,7 @@ class pdosSileSiesta(SileSiesta):
             warn(f"{self!s}.read_data could not locate the Fermi-level in the XML tree")
         return Ef
 
+    @sile_fh_open(True)
     def read_data(self, as_dataarray=False):
         r""" Returns data associated with the PDOS file
 
@@ -71,7 +73,7 @@ class pdosSileSiesta(SileSiesta):
         DataArray : if `as_dataarray` is True, only this data array is returned, in this case all data can be post-processed using the `xarray` selection routines.
         """
         # Get the element-tree
-        root = xml_parse(self.file).getroot()
+        root = xml_parse(self.fh).getroot()
 
         # Get number of orbitals
         nspin = int(root.find('nspin').text)

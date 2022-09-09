@@ -3,6 +3,7 @@
 # file, You can obtain one at https://mozilla.org/MPL/2.0/.
 from functools import wraps
 from os.path import splitext, basename
+from io import StringIO
 import gzip
 from pathlib import Path
 
@@ -527,7 +528,12 @@ def sile_fh_open(from_closed=False):
             @wraps(func)
             def pre_open(self, *args, **kwargs):
                 if hasattr(self, "fh"):
-                    self.fh.seek(0)
+                    # First check if file-handle is still open and if not re-open
+                    if self.fh.closed:
+                        self._open()
+                    else:
+                        # Otherwise just rewind
+                        self.fh.seek(0)
                     return func(self, *args, **kwargs)
                 with self:
                     return func(self, *args, **kwargs)
@@ -537,6 +543,9 @@ def sile_fh_open(from_closed=False):
             @wraps(func)
             def pre_open(self, *args, **kwargs):
                 if hasattr(self, "fh"):
+                    # First check if file-handle is still open and if not re-open
+                    if self.fh.closed:
+                        self._open()
                     return func(self, *args, **kwargs)
                 with self:
                     return func(self, *args, **kwargs)
@@ -562,12 +571,17 @@ class Sile(BaseSile):
         else:
             self._comment = []
         self._line = 0
+        if 'file_handle' in kwargs:
+            self._ext_fh = kwargs.pop('file_handle')
 
         # Initialize
         self._base_setup(*args, **kwargs)
 
     def _open(self):
-        if self.file.suffix == ".gz":
+        if hasattr(self, '_ext_fh') and self._ext_fh is not None and not self._ext_fh.closed:
+            self._ext_fh.seek(0)
+            self.fh = StringIO(self._ext_fh.read())
+        elif self.file.suffix == ".gz":
             if self._mode == 'r':
                 # assume the file is a text file and open in text-mode
                 self.fh = gzip.open(str(self.file), mode='rt')
