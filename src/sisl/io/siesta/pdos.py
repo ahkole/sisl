@@ -9,7 +9,7 @@ from sisl._array import arrayd, arrayi, asarrayi
 from sisl._core.atom import Atom, Atoms, PeriodicTable
 from sisl._core.geometry import Geometry
 from sisl._core.orbital import AtomicOrbital
-from sisl._help import xml_parse
+from sisl._help import xml_iterparse
 from sisl._internal import set_module
 from sisl.messages import SislWarning, warn
 from sisl.unit.siesta import unit_convert
@@ -45,11 +45,25 @@ class pdosSileSiesta(SileSiesta):
     @sile_fh_open(True)
     def read_fermi_level(self) -> float:
         """Returns the fermi-level"""
-        # Get the element-tree
-        root = xml_parse(self.fh).getroot()
+        # Get xml iterator and root node
+        it = xml_iterparse(self.fh, events=["start", "end"])
+        _, root = next(it)
 
         # Try and find the fermi-level
-        Ef = root.find("fermi_energy")
+        Ef = None
+        for event, elem in it:
+            if event == "start":
+                continue
+            if elem.tag == "fermi_energy":
+                Ef = float(elem.text)
+            if elem in root:
+                # Clear top-level xml elements
+                elem.clear()
+            if Ef is not None:
+                # Found fermi-level
+                break
+        root.clear()
+        del it
         if Ef is None:
             warn(f"{self!s}.read_data could not locate the Fermi-level in the XML tree")
         return Ef
@@ -80,22 +94,60 @@ class pdosSileSiesta(SileSiesta):
         all : xarray.DataArray
             if `as_dataarray` is True, only this data array is returned, in this case all data can be post-processed using the `xarray` selection routines.
         """
-        # Get the element-tree
-        root = xml_parse(self.fh).getroot()
+        # Get xml iterator and root node
+        it = xml_iterparse(self.fh, events=["start", "end"])
+        _, root = next(it)
 
-        # Get number of orbitals
-        nspin = int(root.find("nspin").text)
+        # Get number of spins
+        nspin = None
+        while nspin is None:
+            event, elem = next(it)
+            if event == "start":
+                continue
+            if elem.tag == "nspin":
+                nspin = int(elem.text)
+            if elem in root:
+                # Clear top-level xml elements
+                elem.clear()
+
+        # Rewind, and get xml iterator and root node again
+        root.clear()
+        del it
+        self.fh.seek(0)
+        it = xml_iterparse(self.fh, events=["start", "end"])
+        _, root = next(it)
+
         # Try and find the fermi-level
-        Ef = root.find("fermi_energy")
-        E = arrayd(root.find("energy_values").text.split())
+        Ef = None
+        E = None
+        for event, elem in it:
+            if event == "start":
+                continue
+            match elem.tag:
+                case "fermi_energy":
+                    Ef = float(elem.text)
+                case "energy_values":
+                    E = arrayd(elem.text.split())
+            if elem in root:
+                # Clear top-level xml elements
+                elem.clear()
+            if not (Ef is None or E is None):
+                # Found fermi-level and energy values
+                break
         if Ef is None:
             warn(
                 f"{self!s}.read_data could not locate the Fermi-level in the XML tree, using E_F = 0. eV"
             )
         else:
-            Ef = float(Ef.text)
             E -= Ef
         ne = len(E)
+
+        # Rewind, and get xml iterator and root node again
+        root.clear()
+        del it
+        self.fh.seek(0)
+        it = xml_iterparse(self.fh, events=["start", "end"])
+        _, root = next(it)
 
         # All coordinate, atoms and species data
         xyz = []
@@ -170,48 +222,60 @@ class pdosSileSiesta(SileSiesta):
 
         D = []
 
-        for orb in root.findall("orbital"):
-            # Short-hand function to retrieve integers for the attributes
-            def oi(name):
-                return int(orb.get(name))
+        for event, elem in it:
+            if event == "start":
+                continue
+            if elem.tag == "orbital":
+                orb = elem
 
-            # Get indices
-            ia = oi("atom_index") - 1
-            i = oi("index") - 1
+                # Short-hand function to retrieve integers for the attributes
+                def oi(name):
+                    return int(orb.get(name))
 
-            species = orb.get("species")
+                # Get indices
+                ia = oi("atom_index") - 1
+                i = oi("index") - 1
 
-            # Create the atomic orbital
-            try:
-                Z = oi("Z")
-            except Exception:
+                species = orb.get("species")
+
+                # Create the atomic orbital
                 try:
-                    Z = PeriodicTable().Z(species)
+                    Z = oi("Z")
                 except Exception:
-                    # Unknown
-                    Z = -1
+                    try:
+                        Z = PeriodicTable().Z(species)
+                    except Exception:
+                        # Unknown
+                        Z = -1
 
-            try:
-                P = orb.get("P") == "true"
-            except Exception:
-                P = False
+                try:
+                    P = orb.get("P") == "true"
+                except Exception:
+                    P = False
 
-            ensure_size(ia)
-            xyz[ia] = arrayd(orb.get("position").split())
-            atom_species[ia] = Z
+                ensure_size(ia)
+                xyz[ia] = arrayd(orb.get("position").split())
+                atom_species[ia] = Z
 
-            # Construct the atomic orbital
-            O = AtomicOrbital(n=oi("n"), l=oi("l"), m=oi("m"), zeta=oi("z"), P=P)
+                # Construct the atomic orbital
+                O = AtomicOrbital(n=oi("n"), l=oi("l"), m=oi("m"), zeta=oi("z"), P=P)
 
-            # We know that the index is far too high. However,
-            # this ensures a consecutive orbital
-            ensure_size_orb(ia, i)
-            atoms[ia][i] = O
+                # We know that the index is far too high. However,
+                # this ensures a consecutive orbital
+                ensure_size_orb(ia, i)
+                atoms[ia][i] = O
 
-            # it is formed like : spin-1, spin-2 (however already in eV)
-            DOS = arrayd(orb.find("data").text.split()).reshape(-1, nspin)
+                # it is formed like : spin-1, spin-2 (however already in eV)
+                DOS = arrayd(orb.find("data").text.split()).reshape(-1, nspin)
 
-            D.append(to(O, DOS))
+                D.append(to(O, DOS))
+            if elem in root:
+                # Clear top-level xml elements
+                elem.clear()
+
+        # Clear up root and iterator
+        root.clear()
+        del it
 
         # Now we need to parse the data
         # First reduce the atom
