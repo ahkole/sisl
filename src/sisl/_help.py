@@ -18,7 +18,7 @@ __all__ += ["dtype_complex_to_real", "dtype_real_to_complex"]
 __all__ += ["wrap_filterwarnings", "has_module"]
 
 # Wrappers typically used
-__all__ += ["xml_parse"]
+__all__ += ["xml_parse", "xml_iterparse"]
 
 
 # Base-class for string object checks
@@ -27,6 +27,7 @@ import collections.abc as collections_abc
 # Load the correct xml-parser
 try:
     from defusedxml import __version__ as defusedxml_version
+    from defusedxml.ElementTree import iterparse as xml_iterparse
     from defusedxml.ElementTree import parse as xml_parse
 
     try:
@@ -36,6 +37,7 @@ try:
     except Exception:
         raise ImportError
 except ImportError:
+    from xml.etree.ElementTree import iterparse as xml_iterparse
     from xml.etree.ElementTree import parse as xml_parse
 
 
