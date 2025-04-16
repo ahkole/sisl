@@ -45,6 +45,7 @@ from sisl._indices import (
     list_index_le,
 )
 from sisl._internal import set_module
+from sisl._lib._argparse import SislHelpFormatter
 from sisl._math_small import cross3, is_ascending, xyz_to_spherical_cos_phi
 from sisl._namedindex import NamedIndex
 from sisl.messages import SislError, deprecate_argument, deprecation, info, warn
@@ -179,7 +180,7 @@ class Geometry(
         "lattice",
         "argument sc has been deprecated in favor of lattice, please update your code.",
         "0.15",
-        "0.16",
+        "0.17",
     )
     def __init__(
         self,
@@ -366,8 +367,11 @@ class Geometry(
         - name -> self._names[name]
         - `Atom` -> self.atoms.index(atom)
         - range/list/ndarray -> ndarray
+        - `...` -> ndarray
         """
         if atoms is None:
+            return np.arange(self.na)
+        elif atoms is Ellipsis:
             return np.arange(self.na)
         atoms = _a.asarray(atoms)
         if atoms.size == 0:
@@ -452,6 +456,8 @@ class Geometry(
         """
         if orbitals is None:
             return np.arange(self.no)
+        elif orbitals is Ellipsis:
+            return np.arange(self.no)
         orbitals = _a.asarray(orbitals)
         if orbitals.size == 0:
             return _a.asarrayl([])
@@ -471,7 +477,7 @@ class Geometry(
         if start is None:
             start = 0
         if stop is None:
-            stop = self.na
+            stop = self.no
         if step is None:
             step = 1
         return np.arange(start, stop, step)
@@ -1247,7 +1253,7 @@ class Geometry(
         "atol",
         "argument eps has been deprecated in favor of atol",
         "0.15",
-        "0.16",
+        "0.17",
     )
     def overlap(
         self,
@@ -1468,15 +1474,15 @@ class Geometry(
 
         Parameters
         ----------
-        atoms : array_like of int or Atom
+        atoms :
             indices of atoms or `Atom` that will be reduced in size according to `orbitals`
-        orbitals : array_like of int or Orbital
+        orbitals :
             indices of the orbitals on `atoms` that are retained in the geometry, the list of
             orbitals will be sorted.
 
         Notes
         -----
-        Future implementations may allow one to re-arange orbitals using this method.
+        Future implementations may allow one to re-arrange orbitals using this method.
 
         When using this method the internal species list will be populated by another specie
         that is named after the orbitals removed. This is to distinguish different atoms.
@@ -3291,7 +3297,7 @@ class Geometry(
         "atol",
         "argument tol has been deprecated in favor of atol, please update your code.",
         "0.15",
-        "0.16",
+        "0.17",
     )
     def equal(self, other: GeometryLike, R: bool = True, atol: float = 1e-4) -> bool:
         """Whether two geometries are the same (optional not check of the orbital radius)
@@ -3374,7 +3380,7 @@ class Geometry(
         "atol",
         "argument tol has been deprecated in favor of atol, please update your code.",
         "0.15",
-        "0.16",
+        "0.17",
     )
     def distance(
         self,
@@ -3551,7 +3557,7 @@ class Geometry(
         "atol",
         "argument tol has been deprecated in favor of atol, please update your code.",
         "0.15",
-        "0.16",
+        "0.17",
     )
     def within_inf(
         self,
@@ -4410,7 +4416,7 @@ class Geometry(
             nargs=1,
             metavar="SORT",
             action=Sort,
-            help='Semi-colon separated options for sort, please always encapsulate in quotation ["axis=0;descend;lattice=(1, 2);group=Z"].',
+            help='Semi-colon separated options for sort, please always encapsulate in quotation ["axes=0;descend;lattice=(1, 2);group=Z"].',
         )
 
         # Print some common information about the
@@ -4778,7 +4784,7 @@ lattice vector.
 
     p = argparse.ArgumentParser(
         exe,
-        formatter_class=argparse.RawDescriptionHelpFormatter,
+        formatter_class=SislHelpFormatter,
         description=description,
     )
 

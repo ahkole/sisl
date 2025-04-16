@@ -22,40 +22,12 @@ from sisl._indices import indices_fabs_le, indices_le
 from sisl._internal import set_module
 from sisl._math_small import xyz_to_spherical_cos_phi
 from sisl.messages import deprecate_argument, progressbar, warn
-from sisl.typing import AtomsIndex, GaugeType, SeqFloat
+from sisl.typing import AtomsIndex, GaugeType, KPoint, SeqFloat
 
-from .sparse import SparseOrbitalBZSpin
+from .sparse import SparseOrbitalBZSpin, _get_spin
 from .spin import Spin
 
 __all__ = ["DensityMatrix"]
-
-
-def _get_density(DM, orthogonal, what="sum"):
-    DM = DM.T
-    if orthogonal:
-        off = 0
-    else:
-        off = 1
-    if what == "sum":
-        if DM.shape[0] in (2 + off, 4 + off, 8 + off):
-            return DM[0] + DM[1]
-        return DM[0]
-    if what == "spin":
-        m = np.empty([3, DM.shape[1]], dtype=DM.dtype)
-        if DM.shape[0] == 8 + off:
-            m[0] = DM[2] + DM[6]
-            m[1] = -DM[3] + DM[7]
-            m[2] = DM[0] - DM[1]
-        elif DM.shape[0] == 4 + off:
-            m[0] = 2 * DM[2]
-            m[1] = -2 * DM[3]
-            m[2] = DM[0] - DM[1]
-        elif DM.shape[0] == 2 + off:
-            m[:2, :] = 0.0
-            m[2] = DM[0] - DM[1]
-        elif DM.shape[0] == 1 + off:
-            m[...] = 0.0
-        return m
 
 
 class _densitymatrix(SparseOrbitalBZSpin):
@@ -197,7 +169,7 @@ class _densitymatrix(SparseOrbitalBZSpin):
                 out._csr._D[:, [0, 1]] = out._csr._D[:, [1, 0]]
 
             else:
-                spin = Spin("nc", dtype=self.dtype)
+                spin = Spin("nc")
                 out = self.__class__(
                     self.geometry,
                     dtype=self.dtype,
@@ -333,7 +305,7 @@ class _densitymatrix(SparseOrbitalBZSpin):
 
         elif self.spin.is_polarized:
             if vec[:2] @ vec[:2] > 1e-6:
-                spin = Spin("nc", dtype=self.dtype)
+                spin = Spin("nc")
                 out = self.__class__(
                     self.geometry,
                     dtype=self.dtype,
@@ -539,10 +511,10 @@ class _densitymatrix(SparseOrbitalBZSpin):
         m, *opts = method.split(":")
 
         # only extract the summed density
-        what = "sum"
+        what = "trace"
         if "spin" in opts:
             # do this for each spin x, y, z
-            what = "spin"
+            what = "vector"
             del opts[opts.index("spin")]
 
         # Check that there are no un-used options
@@ -556,7 +528,7 @@ class _densitymatrix(SparseOrbitalBZSpin):
         rows, cols, DM = _to_coo(self._csr)
 
         # Convert to requested matrix form
-        D = _get_density(DM, self.orthogonal, what)
+        D = _get_spin(DM, self.spin, what).T
 
         # Define a matrix-matrix multiplication
         def mm(A, B):
@@ -707,7 +679,7 @@ class _densitymatrix(SparseOrbitalBZSpin):
         "atol",
         "argument tol has been deprecated in favor of atol, please update your code.",
         "0.15",
-        "0.16",
+        "0.17",
     )
     def density(
         self,
@@ -796,7 +768,7 @@ class _densitymatrix(SparseOrbitalBZSpin):
 
             DM = _a.emptyz([self.nnz, 2, 2])
             idx = _a.array_arange(csr.ptr[:-1], n=csr.ncol)
-            if self.spin.kind == Spin.NONCOLINEAR:
+            if self.spin.is_noncolinear:
                 # non-collinear
                 DM[:, 0, 0] = csr._D[idx, 0]
                 DM[:, 0, 1] = csr._D[idx, 2] + 1j * csr._D[idx, 3]
@@ -841,6 +813,8 @@ class _densitymatrix(SparseOrbitalBZSpin):
 
             csrDM = csr.tocsr(dim=0) * spinor[0] + csr.tocsr(dim=1) * spinor[1]
 
+        elif self.spin.is_nambu:
+            raise NotImplementedError("Nambu spin configuration not implemneted")
         else:
             csrDM = csr.tocsr(dim=0)
 
@@ -1307,9 +1281,9 @@ class DensityMatrix(_densitymatrix):
             orbital angular momentum with the last dimension equalling the :math:`L_x`, :math:`L_y` and :math:`L_z` components
         """
         # Check that the spin configuration is correct
-        if not self.spin.is_spinorbit:
+        if not (self.spin.is_spinorbit or self.spin.is_nambu):
             raise ValueError(
-                f"{self.__class__.__name__}.orbital_momentum requires a spin-orbit matrix"
+                f"{self.__class__.__name__}.orbital_momentum requires minimum a spin-orbit matrix"
             )
 
         # First we calculate
@@ -1507,9 +1481,9 @@ class DensityMatrix(_densitymatrix):
 
     def Dk(
         self,
-        k=(0, 0, 0),
+        k: KPoint = (0, 0, 0),
         dtype=None,
-        gauge: GaugeType = "cell",
+        gauge: GaugeType = "lattice",
         format="csr",
         *args,
         **kwargs,
@@ -1537,14 +1511,14 @@ class DensityMatrix(_densitymatrix):
 
         Parameters
         ----------
-        k : array_like
+        k :
            the k-point to setup the density matrix at
         dtype : numpy.dtype , optional
            the data type of the returned matrix. Do NOT request non-complex
            data-type for non-Gamma k.
            The default data-type is `numpy.complex128`
         gauge :
-           the chosen gauge, ``cell`` for cell vector gauge, and ``atom`` for atomic distance
+           the chosen gauge, ``lattice`` for cell vector gauge, and ``atomic`` for atomic distance
            gauge.
         format : {'csr', 'array', 'dense', 'coo', ...}
            the returned format of the matrix, defaulting to the `scipy.sparse.csr_matrix`,
@@ -1571,9 +1545,9 @@ class DensityMatrix(_densitymatrix):
 
     def dDk(
         self,
-        k=(0, 0, 0),
+        k: KPoint = (0, 0, 0),
         dtype=None,
-        gauge: GaugeType = "cell",
+        gauge: GaugeType = "lattice",
         format="csr",
         *args,
         **kwargs,
@@ -1602,14 +1576,14 @@ class DensityMatrix(_densitymatrix):
 
         Parameters
         ----------
-        k : array_like
+        k :
            the k-point to setup the density matrix at
         dtype : numpy.dtype , optional
            the data type of the returned matrix. Do NOT request non-complex
            data-type for non-Gamma k.
            The default data-type is `numpy.complex128`
         gauge :
-           the chosen gauge, ``cell`` for cell vector gauge, and ``atom`` for atomic distance
+           the chosen gauge, ``lattice`` for cell vector gauge, and ``atomic`` for atomic distance
            gauge.
         format : {'csr', 'array', 'dense', 'coo', ...}
            the returned format of the matrix, defaulting to the `scipy.sparse.csr_matrix`,
@@ -1634,9 +1608,9 @@ class DensityMatrix(_densitymatrix):
 
     def ddDk(
         self,
-        k=(0, 0, 0),
+        k: KPoint = (0, 0, 0),
         dtype=None,
-        gauge: GaugeType = "cell",
+        gauge: GaugeType = "lattice",
         format="csr",
         *args,
         **kwargs,
@@ -1665,14 +1639,14 @@ class DensityMatrix(_densitymatrix):
 
         Parameters
         ----------
-        k : array_like
+        k :
            the k-point to setup the density matrix at
         dtype : numpy.dtype , optional
            the data type of the returned matrix. Do NOT request non-complex
            data-type for non-Gamma k.
            The default data-type is `numpy.complex128`
         gauge :
-           the chosen gauge, ``cell`` for cell vector gauge, and ``atom`` for atomic distance
+           the chosen gauge, ``lattice`` for cell vector gauge, and ``atomic`` for atomic distance
            gauge.
         format : {'csr', 'array', 'dense', 'coo', ...}
            the returned format of the matrix, defaulting to the `scipy.sparse.csr_matrix`,

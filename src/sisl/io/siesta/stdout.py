@@ -17,6 +17,7 @@ from sisl._help import voigt_matrix
 from sisl._internal import set_module
 from sisl.messages import deprecation, warn
 from sisl.physics import Spin
+from sisl.physics.brillouinzone import MonkhorstPack
 from sisl.unit.siesta import unit_convert
 from sisl.utils import PropertyDict
 from sisl.utils.cmd import *
@@ -44,6 +45,8 @@ def _parse_spin(attr, instance, match):
     """Parse 'redata: Spin configuration *= <value>'"""
     opt = match.string.split("=")[-1].strip()
 
+    if opt.startswith("nambu"):
+        return Spin("nambu")
     if opt.startswith("spin-orbit"):
         return Spin("spin-orbit")
     if opt.startswith("collinear") or opt.startswith("colinear"):
@@ -117,7 +120,7 @@ def _parse_version(attr, instance, match):
     version, *spec = opt.split("-", maxsplit=1)
     try:
         version = tuple(int(v) for v in version.split("."))
-    except BaseException:
+    except Exception:
         version = (0, 0, 0)
 
     # Convert version to a tuple
@@ -203,7 +206,7 @@ class stdoutSileSiesta(SileSiesta):
     @deprecation(
         "stdoutSileSiesta.completed is deprecated in favor of stdoutSileSiesta.info.completed",
         "0.15",
-        "0.16",
+        "0.17",
     )
     def completed(self):
         """True if the full file has been read and "Job completed" was found."""
@@ -767,6 +770,45 @@ class stdoutSileSiesta(SileSiesta):
 
         return out
 
+    @SileBinder()
+    @sile_fh_open()
+    def read_brillouinzone(self, trs: bool = True) -> MonkhorstPack:
+        r"""Parses the k-grid section if present, otherwise returns the
+        :math:`\Gamma`-point"""
+
+        # store position, read geometry, then reposition file.
+        tell = self.fh.tell()
+        geom = self.read_geometry()
+        self.fh.seek(tell)
+
+        found, line = self.step_to(
+            "siesta: k-grid: Number of k-points", allow_reread=False
+        )
+
+        if not found:
+            return MonkhorstPack(geom, 1, trs=trs)
+
+        nk = int(line.split("=")[-1])
+
+        # default kcell and kdispl
+        kcell = np.diag([1, 1, 1])
+        kdispl = np.zeros(3)
+
+        # if next line also contains 'siesta: k-grid:' then we can step_to
+        line = self.readline()
+        if line.startswith("siesta: k-grid:"):
+            if self.step_to(
+                "siesta: k-grid: Supercell and displacements", allow_reread=False
+            )[0]:
+                for i in range(3):
+                    line = self.readline().split()
+                    kdispl[i] = float(line[-1])
+                    kcell[i, 2] = int(line[-2])
+                    kcell[i, 1] = int(line[-3])
+                    kcell[i, 0] = int(line[-4])
+
+        return MonkhorstPack(geom, kcell, displacement=kdispl, trs=trs)
+
     def read_data(self, *args, **kwargs) -> Any:
         """Read specific content in the Siesta out file
 
@@ -828,7 +870,7 @@ class stdoutSileSiesta(SileSiesta):
     def read_scf(
         self,
         key: str = "scf",
-        iscf: Optional[int] = -1,
+        iscf: Optional[Union[int, Ellipsis]] = -1,
         as_dataframe: bool = False,
         ret_header: bool = False,
     ):
@@ -840,7 +882,7 @@ class stdoutSileSiesta(SileSiesta):
             parse SCF information from Siesta SCF or TranSiesta SCF
         iscf :
             which SCF cycle should be stored. If ``-1`` only the final SCF step is stored,
-            for None *all* SCF cycles are returned. When `iscf` values queried are not found they
+            for `...`/`None` *all* SCF cycles are returned. When `iscf` values queried are not found they
             will be truncated to the nearest SCF step.
         as_dataframe:
             whether the information should be returned as a `pandas.DataFrame`. The advantage of this
@@ -854,7 +896,9 @@ class stdoutSileSiesta(SileSiesta):
         # These are the properties that are written in SIESTA scf
         props = ["iscf", "Eharris", "E_KS", "FreeEng", "dDmax", "Ef", "dHmax"]
 
-        if not iscf is None:
+        if iscf is Ellipsis:
+            iscf = None
+        elif iscf is not None:
             if iscf == 0:
                 raise ValueError(
                     f"{self.__class__.__name__}.read_scf requires iscf argument to *not* be 0!"
@@ -1084,8 +1128,8 @@ class stdoutSileSiesta(SileSiesta):
     def read_charge(
         self,
         name: Literal["voronoi", "hirshfeld", "mulliken", "mulliken:<5.2"],
-        iscf=Opt.ANY,
-        imd=Opt.ANY,
+        iscf: Union[Opt, int, Ellipsis] = Opt.ANY,
+        imd: Union[Opt, int, Ellipsis] = Opt.ANY,
         key_scf: str = "scf",
         as_dataframe: bool = False,
     ):
@@ -1127,15 +1171,15 @@ class stdoutSileSiesta(SileSiesta):
         ----------
         name:
             the name of the charges that you want to read
-        iscf: int or Opt, optional
+        iscf: int or Opt or `...`, optional
             index (0-based) of the scf iteration you want the charges for.
-            If the enum specifier `Opt.ANY` or `Opt.ALL` are used, then
+            If the enum specifier `Opt.ANY` or `Opt.ALL`/`...` are used, then
             the returned quantities depend on what is present.
             If ``None/Opt.NONE`` it will not return any SCF charges.
             If both `imd` and `iscf` are ``None`` then only the final charges will be returned.
         imd: int or Opt, optional
             index (0-based) of the md step you want the charges for.
-            If the enum specifier `Opt.ANY` or `Opt.ALL` are used, then
+            If the enum specifier `Opt.ANY` or `Opt.ALL`/`...` are used, then
             the returned quantities depend on what is present.
             If ``None/Opt.NONE`` it will not return any MD charges.
             If both `imd` and `iscf` are ``None`` then only the final charges will be returned.
@@ -1427,7 +1471,7 @@ class stdoutSileSiesta(SileSiesta):
                             "Mulliken Atomic Populations",
                             "Mulliken Net Atomic Populations",
                         ]
-                except BaseException:
+                except Exception:
                     pass
 
         else:
@@ -1568,9 +1612,9 @@ class stdoutSileSiesta(SileSiesta):
                 md_scf_charge = pd.concat(
                     [
                         pd.concat(
-                            iscf, keys=pd.RangeIndex(1, len(iscf) + 1, name="iscf")
+                            iscf_, keys=pd.RangeIndex(1, len(iscf_) + 1, name="iscf")
                         )
-                        for iscf in md_scf_charge
+                        for iscf_ in md_scf_charge
                     ],
                     keys=pd.RangeIndex(1, len(md_scf_charge) + 1, name="imd"),
                 )
@@ -1605,6 +1649,9 @@ class stdoutSileSiesta(SileSiesta):
             flag :
                 corrected flag
             """
+            if flag is Ellipsis:
+                flag = Opt.ALL
+
             if isinstance(flag, Opt):
                 # correct flag depending on what `found` is
                 # If the values have been found we
@@ -1714,7 +1761,7 @@ class stdoutSileSiesta(SileSiesta):
 
 
 outSileSiesta = deprecation(
-    "outSileSiesta has been deprecated in favor of stdoutSileSiesta.", "0.15", "0.16"
+    "outSileSiesta has been deprecated in favor of stdoutSileSiesta.", "0.15", "0.17"
 )(stdoutSileSiesta)
 
 add_sile("siesta.out", stdoutSileSiesta, case=False, gzip=True)

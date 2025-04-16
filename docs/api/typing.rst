@@ -1,7 +1,7 @@
 .. _typing:
 
-Typing
-======
+Typing (`sisl.typing`)
+======================
 
 .. module:: sisl.typing
 
@@ -48,7 +48,18 @@ The typing types are shown below:
    LatticeLike
    LatticeOrGeometry
    LatticeOrGeometryLike
+   ProjectionTypeMatrix
+   ProjectionTypeTrace
+   ProjectionTypeDiag
+   ProjectionTypeHadamard
+   ProjectionTypeHadamardAtoms
+   ProjectionType
+   DistributionStr
+   DistributionFunc
+   DistributionType
    SileLike
    SparseMatrix
    SparseMatrixExt
+   SparseMatrixGeometry
+   SparseMatrixPhysical
    UnitsVar

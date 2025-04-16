@@ -39,7 +39,7 @@ jobs:
       CIBW_BEFORE_BUILD: >-
         rm -rf {package}/build
       # Instead of running pytest directly, we use a bash script that will set up
-      # the appropiate value for the SISL_FILES_TEST variable, a path pointing to
+      # the appropriate value for the SISL_FILES_TEST variable, a path pointing to
       # the sisl-files directory, which contains files for testing.
       CIBW_TEST_COMMAND: >-
         bash {project}/tools/build_tools/test_wheels.sh
@@ -55,8 +55,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # Linux 64 bit manylinux2014
-          - os: ubuntu-20.04
+          # Linux 64 bit
+          - os: ubuntu-22.04
             cibw_archs: "x86_64"
 
           # MacOS x86_64
@@ -81,41 +81,41 @@ jobs:
         uses: fortran-lang/setup-fortran@v1
         with:
           compiler: gcc
-          version: 11
+          version: 12
 
       - name: Build wheels for CPython 3.13
-        uses: pypa/cibuildwheel@v2.21.3
+        uses: pypa/cibuildwheel@v2.23.2
         env:
           CIBW_BUILD: "cp313t-* cp313-*"
           CIBW_ARCHS: ${{ matrix.cibw_archs }}
           CIBW_BUILD_FRONTEND:
             "pip; args: --pre --extra-index-url https://pypi.anaconda.org/scientific-python-nightly-wheels/simple"
-          CIBW_FREE_THREADED_SUPPORT: true
+          CIBW_ENABLE: "cpython-freethreading"
           CIBW_BEFORE_TEST: >-
             pip install --pre
             --extra-index-url https://pypi.anaconda.org/scientific-python-nightly-wheels/simple
             numpy scipy
 
       - name: Build wheels for CPython 3.12
-        uses: pypa/cibuildwheel@v2.21.3
+        uses: pypa/cibuildwheel@v2.23.2
         env:
           CIBW_BUILD: "cp312-*"
           CIBW_ARCHS: ${{ matrix.cibw_archs }}
 
       - name: Build wheels for CPython 3.11
-        uses: pypa/cibuildwheel@v2.21.3
+        uses: pypa/cibuildwheel@v2.23.2
         env:
           CIBW_BUILD: "cp311-*"
           CIBW_ARCHS: ${{ matrix.cibw_archs }}
 
       - name: Build wheels for CPython 3.10
-        uses: pypa/cibuildwheel@v2.21.3
+        uses: pypa/cibuildwheel@v2.23.2
         env:
           CIBW_BUILD: "cp310-*"
           CIBW_ARCHS: ${{ matrix.cibw_archs }}
 
       - name: Build wheels for CPython 3.9
-        uses: pypa/cibuildwheel@v2.21.3
+        uses: pypa/cibuildwheel@v2.23.2
         env:
           CIBW_BUILD: "cp39-*"
           CIBW_ARCHS: ${{ matrix.cibw_archs }}
@@ -162,7 +162,7 @@ jobs:
       - name: Print packages
         run: ls dist
 
-      - uses: pypa/gh-action-pypi-publish@v1.11.0
+      - uses: pypa/gh-action-pypi-publish@v1.12.4
         with:
           user: __token__
           password: ${{ secrets.TESTPYPI_TOKEN }}
@@ -235,7 +235,7 @@ jobs:
           path: dist
           merge-multiple: True
 
-      - uses: pypa/gh-action-pypi-publish@v1.11.0
+      - uses: pypa/gh-action-pypi-publish@v1.12.4
         with:
           user: __token__
           password: ${{ secrets.PYPI_TOKEN }}

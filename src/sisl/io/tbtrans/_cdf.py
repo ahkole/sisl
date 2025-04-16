@@ -16,6 +16,7 @@ from sisl import Atom, Geometry, Lattice
 from sisl._indices import indices
 from sisl._internal import set_module
 from sisl.messages import deprecate, info, warn
+from sisl.physics.brillouinzone import BrillouinZone
 from sisl.physics.distribution import fermi_dirac
 from sisl.unit.siesta import unit_convert
 
@@ -54,7 +55,13 @@ class _ncSileTBtrans(SileCDFTBtrans):
         return lattice
 
     def read_geometry(self, *args, **kwargs) -> Geometry:
-        """Returns `Geometry` object from this file"""
+        """Returns `Geometry` object from this file
+
+        Parameters
+        ----------
+        atoms :
+            atoms used instead of random species
+        """
         lattice = self.read_lattice()
 
         xyz = _a.arrayd(np.copy(self.xa))
@@ -64,23 +71,23 @@ class _ncSileTBtrans(SileCDFTBtrans):
         lasto = _a.arrayi(np.copy(self.lasto) + 1)
         nos = np.diff(lasto, prepend=0)
 
-        if "atom" in kwargs:
-            # The user "knows" which atoms are present
-            atms = kwargs["atom"]
+        atoms = kwargs.get("atoms", kwargs.get("atom"))
+
+        if atoms is not None:
             # Check that all atoms have the correct number of orbitals.
             # Otherwise we will correct them
-            for i in range(len(atms)):
-                if atms[i].no != nos[i]:
-                    atms[i] = Atom(atms[i].Z, [-1] * nos[i], tag=atms[i].tag)
+            for i in range(len(atoms)):
+                if atoms[i].no != nos[i]:
+                    atoms[i] = Atom(atoms[i].Z, [-1] * nos[i], tag=atoms[i].tag)
 
         else:
             # Default to Hydrogen atom with nos[ia] orbitals
             # This may be counterintuitive but there is no storage of the
             # actual species
-            atms = [Atom("H", [-1] * o) for o in nos]
+            atoms = [Atom("H", [-1] * o) for o in nos]
 
         # Create and return geometry object
-        geom = Geometry(xyz, atms, lattice=lattice)
+        geom = Geometry(xyz, atoms, lattice=lattice)
 
         return geom
 
@@ -92,16 +99,6 @@ class _ncSileTBtrans(SileCDFTBtrans):
     def geometry(self) -> Geometry:
         """The associated geometry from this file"""
         return self.read_geometry()
-
-    @property
-    def geom(self):
-        """Same as `geometry`, but deprecated"""
-        deprecate(
-            f"{self.__class__.__name__}.geom is deprecated, please use '.geometry'."
-            "0.14",
-            "0.16",
-        )
-        return self.geometry
 
     @property
     @lru_cache(maxsize=1)
@@ -185,18 +182,19 @@ class _ncSileTBtrans(SileCDFTBtrans):
         Parameters
         ----------
         E :
-           if `int`, return it-self, else return the energy index which is
-           closests to the energy.
+           return the energy index which is
+           closest to the energy passed.
            For a `str` it will be parsed to a float and treated as such.
         method :
             how non-equal values should be located.
-            * `nearest` takes the closests value
-            * `above` takes the closests value above `E`.
-            * `below` takes the closests value below `E`.
+            * `nearest` takes the closest value
+            * `above` takes the closest value above `E`.
+            * `below` takes the closest value below `E`.
         """
-        warn(
-            f"{self.__class__.__name__}.Eindex handles int's the same as floats [>0.15.2]."
-        )
+        if isinstance(E, int):
+            warn(
+                f"{self.__class__.__name__}.Eindex handles int's the same as floats [>0.15.2]."
+            )
         E = float(E)
 
         dE = self.E - E
@@ -238,6 +236,11 @@ class _ncSileTBtrans(SileCDFTBtrans):
             )
         return idxE
 
+    def _argsort_E(self):
+        """Internal routine for returning energies and transmission in a sorted array"""
+        idx_sort = np.argsort(self.E)
+        return idx_sort
+
     def _bias_window_integrator(self, elec_from: ElecType = 0, elec_to: ElecType = 1):
         r"""An integrator for the bias window between two electrodes
 
@@ -265,7 +268,7 @@ class _ncSileTBtrans(SileCDFTBtrans):
         kt_to = self.kT(elec_to)
         mu_to = self.chemical_potential(elec_to)
         # Get energies
-        E = self._E_T_sorted(elec_from, elec_to)[0]
+        E = self.E[self._argsort_E()]
         dE = E[1] - E[0]
 
         def integrator(E):
@@ -299,6 +302,15 @@ class _ncSileTBtrans(SileCDFTBtrans):
                 )
             )
         return ik
+
+    def read_brillouinzone(self) -> BrillouinZone:
+        """Returns a `BrillouinZone` object with the k-points associated"""
+        geom = self.read_geometry()
+        k = self.k
+        wk = self.wk
+
+        # so far, we don't know if it has Monkhorst-Pack or TRS etc.
+        return BrillouinZone(geom, k, wk)
 
 
 @set_module("sisl.io.tbtrans")

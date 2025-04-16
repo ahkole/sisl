@@ -20,6 +20,7 @@ from sisl._dispatch_class import _Dispatchs
 from sisl._dispatcher import AbstractDispatch, ClassDispatcher, TypeDispatcher
 from sisl._help import dtype_complex_to_real, wrap_filterwarnings
 from sisl._internal import set_module
+from sisl._lib._argparse import SislHelpFormatter
 from sisl.messages import deprecate_argument, deprecation
 from sisl.shape import Shape
 from sisl.utils import (
@@ -107,14 +108,14 @@ class Grid(
         "lattice",
         "argument sc has been deprecated in favor of lattice, please update your code.",
         "0.15",
-        "0.16",
+        "0.17",
     )
     @deprecate_argument(
         "bc",
         None,
         "argument bc has been deprecated (removed) in favor of the boundary conditions in Lattice, please update your code.",
         "0.15",
-        "0.16",
+        "0.17",
     )
     def __init__(
         self,
@@ -147,7 +148,7 @@ class Grid(
     @deprecation(
         "Grid.set_bc is deprecated since boundary conditions are moved to Lattice (see github issue #626)",
         "0.15",
-        "0.16",
+        "0.17",
     )
     def set_bc(self, bc):
         self.lattice.set_boundary_condition(bc)
@@ -155,7 +156,7 @@ class Grid(
     @deprecation(
         "Grid.set_boundary is deprecated since boundary conditions are moved to Lattice (see github issue #626)",
         "0.15",
-        "0.16",
+        "0.17",
     )
     def set_boundary(self, bc):
         self.lattice.set_boundary_condition(bc)
@@ -163,7 +164,7 @@ class Grid(
     @deprecation(
         "Grid.set_boundary_condition is deprecated since boundary conditions are moved to Lattice (see github issue #626)",
         "0.15",
-        "0.16",
+        "0.17",
     )
     def set_boundary_condition(self, bc):
         self.lattice.set_boundary_condition(bc)
@@ -1184,7 +1185,7 @@ class Grid(
     @deprecation(
         "Grid.topyamg is deprecated in favor of Grid.to.pyamg",
         "0.15",
-        "0.16",
+        "0.17",
     )
     def topyamg(self, dtype=None):
         r"""Create a `pyamg` stencil matrix to be used in pyamg
@@ -1747,7 +1748,7 @@ This may be unexpected but enables one to do advanced manipulations.
 
     p = argparse.ArgumentParser(
         exe,
-        formatter_class=argparse.RawDescriptionHelpFormatter,
+        formatter_class=SislHelpFormatter,
         description=description,
     )
 

@@ -363,8 +363,13 @@ def get_sile_class(filename, *args, **kwargs):
                     f"Cannot determine the exact Sile requested, multiple hits: {tuple(e.cls.__name__ for e in eligibles)}"
                 )
 
+        # Print-out error on which extensions it tried (and full filename)
+        if len(end_list) == 1:
+            ext_list = end_list
+        else:
+            ext_list = end_list[1:]
         raise NotImplementedError(
-            f"Sile for file '{filename}' could not be found, "
+            f"Sile for file '{filename}' ({ext_list}) could not be found, "
             "possibly the file has not been implemented."
         )
 
@@ -604,14 +609,14 @@ class BaseSile:
             deprecate(
                 f"{self.__class__.__name__}.read_supercell is deprecated in favor of read_lattice",
                 "0.15",
-                "0.16",
+                "0.17",
             )
             return getattr(self, "read_lattice")
         if name == "write_supercell" and hasattr(self, "write_lattice"):
             deprecate(
                 f"{self.__class__.__name__}.write_supercell is deprecated in favor of write_lattice",
                 "0.15",
-                "0.16",
+                "0.17",
             )
             return getattr(self, "write_lattice")
         return getattr(self.fh, name)
@@ -1194,7 +1199,7 @@ class Sile(Info, BaseSile):
             yield l
             l = self.readline(comment=True)
 
-    def readline(self, comment=False):
+    def readline(self, comment: bool = False) -> str:
         r"""Reads the next line of the file"""
         l = self.fh.readline()
         self._line += 1
@@ -1303,7 +1308,7 @@ else:
 
             exe = Path(sys.executable).name
             msg = f"Could not import netCDF4. Please install it using '{exe} -m pip install netCDF4'"
-            raise SileError(msg) from e
+            raise SileError(msg)
 
     netCDF4 = _mock_netCDF4()
 

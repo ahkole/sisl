@@ -10,14 +10,14 @@
 [tool.setuptools_scm]
 write_to = "src/sisl/_version.py"
 version_file = "src/sisl/_version.py"
-fallback_version = "0.15.2"
+fallback_version = "0.16.0"
 
 # First we define the build-system which we will probably alter the most
 [build-system]
 requires = [
-    "setuptools_scm[toml]>=6.2",
+    "setuptools_scm[toml]>=8",
     "scikit-build-core[pyproject]>=0.8",
-    "Cython>=3",
+    "Cython>=3.0.8",
     "numpy>=2.0.0rc1"
 ]
 build-backend = "scikit_build_core.build"
@@ -35,7 +35,9 @@ keywords = [
     "DFT",
     "LCAO",
     "NEGF",
-    "physics"
+    "physics",
+    "bandstructure",
+    "solid-state",
 ]
 
 # Our dependencies should pretty much follow EOL python releases
@@ -110,7 +112,11 @@ cmake.version = ">=3.20"
 
 # source configuration
 sdist.reproducible = true
-sdist.include = ["src/sisl/_version.py", "*/CMakeLists.txt"]
+sdist.include = [
+    "src/sisl/_version.py",
+    "src/sisl/_debug_info.py",
+    "*/CMakeLists.txt"
+]
 
 wheel.expand-macos-universal-tags = true
 
@@ -131,7 +137,7 @@ Documentation = "https://zerothi.github.io/sisl"
 Source = "https://github.com/zerothi/sisl"
 Tracker = "https://github.com/zerothi/sisl/issues"
 Discussions = "https://github.com/zerothi/sisl/discussions"
-Changelog = "https://zerothi.github.io/sisl/changelog/index.html"
+Changelog = "https://zerothi.github.io/sisl/release.html"
 Chat = "https://discord.gg/5XnFXFdkv2"
 
 
@@ -197,6 +203,7 @@ test = [
 
 docs = [
     "sphinx<8",
+    "plotly<6",
     "nbsphinx",
     "sphinx-rtd-theme",
     "sphinx-design",
@@ -331,3 +338,70 @@ extend-exclude = """
  | .*/\\..*
 )
 """
+
+
+[tool.numpydoc_validation]
+checks = ["all", "EX01", "SA01", "ES01"]
+exclude = [
+    '^conf\.',
+]
+
+
+[tool.towncrier]
+# currently casing is inconsistent when using package
+# see https://github.com/twisted/towncrier/issues/686
+#package = "sisl"
+name = "sisl"
+single_file = false
+package_dir = "src"
+directory = "changes/"
+template = "docs/release/template.rst"
+filename = "docs/release/{version}-notes.rst"
+issue_format = ":pull:`{issue}`"
+title_format = "{name} {version} Release Notes"
+underlines = "*=-"
+all_bullets = true
+orphan_prefix = "orphan."
+
+
+    [[tool.towncrier.section]]
+    name = ""
+    # In top-level changes directory
+    path = ""
+
+    [[tool.towncrier.section]]
+    name = "Toolboxes"
+    # Nested in changes/toolbox
+    path = "toolbox"
+
+
+    [[tool.towncrier.type]]
+    directory = "highlight"
+    name = "Highlights"
+    showcontent = true
+
+    [[tool.towncrier.type]]
+    directory = "feat"
+    name = "New features"
+    showcontent = true
+
+    [[tool.towncrier.type]]
+    directory = "change"
+    name = "Changes and improvements"
+    showcontent = true
+
+    [[tool.towncrier.type]]
+    directory = "fix"
+    name = "Bugfixes"
+    showcontent = true
+
+[tool.rstcheck]
+ignore_directives = [
+    "autosummary",
+    "module",
+    "toctree",
+]
+ignore_roles = [
+    "download",
+    "ref",
+]

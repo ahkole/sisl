@@ -9,12 +9,13 @@ from typing import Optional, Union
 
 import numpy as np
 
-from sisl import Atom, Geometry, geom
+from sisl import Atom, Geometry
 from sisl._internal import set_module
 from sisl.typing import AtomsLike
 
 from ._common import geometry_define_nsc
 from ._composite import CompositeGeometrySection, composite_geometry
+from .flat import honeycomb
 
 __all__ = [
     "nanoribbon",
@@ -78,7 +79,7 @@ def nanoribbon(
     width = max(width, 1)
     n, m = width // 2, width % 2
 
-    ribbon = geom.honeycomb(bond, atoms, orthogonal=True, vacuum=vacuum_perp)
+    ribbon = honeycomb(bond, atoms, orthogonal=True, vacuum=vacuum_perp)
     angle = 0
 
     kind = kind.lower()
@@ -109,7 +110,7 @@ def nanoribbon(
         ribbon.set_lattice([ribbon.cell[1, 0], -ribbon.cell[0, 1], ribbon.cell[2, 2]])
 
         # Sort along x, then y
-        ribbon = ribbon.sort(axis=(0, 1))
+        ribbon = ribbon.sort(axes=(0, 1))
 
         if kind == "chiral":
             # continue with the zigzag ribbon as building block

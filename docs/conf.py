@@ -13,7 +13,7 @@
 #
 # All configuration values have a default; values that are commented out
 # serve to show the default.
-
+"""sisl documentation"""
 from __future__ import annotations
 
 import inspect
@@ -23,15 +23,20 @@ import pathlib
 import sys
 from datetime import date
 from functools import wraps
+from textwrap import indent
 
 _log = logging.getLogger("sisl_doc")
 
+_doc_root = pathlib.Path(__file__).absolute().parent
 # If extensions (or modules to document with autodoc) are in another directory,
 # add these directories to sys.path here. If the directory is relative to the
 # documentation root, use os.path.abspath to make it absolute, like shown here.
 # make sure the source version is preferred (#3567)
-_root = pathlib.Path(__file__).absolute().parent.parent
+_root = _doc_root.parent
 _src = _root / "src"
+
+# add the exts folder
+sys.path.insert(1, str(_doc_root))
 
 # Print standard information about executable and path...
 print("python exec:", sys.executable)
@@ -42,6 +47,8 @@ import numpy as np
 import sisl
 
 print(f"sisl: {sisl.__version__}, {sisl.__file__}")
+# Extract debug-information, for completeness sake.
+sisl.debug_info()
 import pybtex
 
 # Figure out if we can locate the tests:
@@ -51,7 +58,7 @@ print("  is directory: ", sisl_files_tests.is_dir())
 if sisl_files_tests.is_dir():
     print("  content:")
     for _child in sisl_files_tests.iterdir():
-        print(f"    {_child}")
+        print(f"    ./{_child.relative_to(sisl_files_tests)}")
 
 
 # Setting up generic things
@@ -114,31 +121,47 @@ extensions = [
 ]
 
 
+# Define the prefix block that should not be copied in code-blocks
+copybutton_prompt_text = r"\$ |\$> |>>> |\.\.\. "
+copybutton_prompt_is_regexp = True
+copybutton_line_continuation_character = "\\"
+
+# We use numpy style docs
 napoleon_google_docstring = False
 napoleon_numpy_docstring = True
-napoleon_use_param = False
-napoleon_use_rtype = False
-napoleon_use_ivar = False
+# Converts type-definitions to references
 napoleon_preprocess_types = True
-# Using attr_annotations = True ensures that
-# autodoc_type_aliases is in effect.
-# Then there is no need to use napoleon_type_aliases.
-napoleon_attr_annotations = True
+# Puts notes in boxes
+napoleon_use_admonition_for_notes = True
 
+# If numpydoc is available, then let sphinx report warnings
+numpydoc_validation_checks = {"all", "EX01", "SA01", "ES01"}
 
-# The default is MathJax 3.
-# In case we want to revert to 2.7.7, then use the below link:
-# mathjax_path = "https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.7/latest.js?config=TeX-AMS-MML_HTMLorMML"
+# These two options should solve the "toctree contains reference to nonexisting document"
+# problem.
+# See here: numpydoc #69
+# class_members_toctree = False
+# If this is false we do not have double method sections
+# numpydoc_show_class_members = False
+
+# Attributes section will be formatted as methods
+numpydoc_attributes_as_param_list = False
 
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ["_templates"]
+from sisl_modules.github_links import GHFormat, GHLink
 
-# Short-hand for :doi:
+
+def _link_constructor(type):
+    return GHLink(type), GHFormat(type)
+
+
 extlinks = {
-    "issue": ("https://github.com/zerothi/sisl/issues/%s", "GH%s"),
-    "pull": ("https://github.com/zerothi/sisl/pull/%s", "PR%s"),
-    "discussion": ("https://github.com/zerothi/sisl/discussions/%s", "D%s"),
+    # If these are changed, please update pyproject.toml under towncrier section
+    "issue": _link_constructor("issues"),
+    "pull": _link_constructor("pull"),
+    "discussion": _link_constructor("discussions"),
     "doi": ("https://doi.org/%s", "%s"),
 }
 
@@ -233,15 +256,26 @@ autodoc_default_options = {
     "inherited-members": True,
     "show-inheritance": True,
 }
+
+# How to show the class signature
+#  mixed: signature with class name
+#  separated: signature as method
+autodoc_class_signature = "separated"
+
 # alphabetical | groupwise | bysource
 # How automodule + autoclass orders content.
 # Right now, the current way sisl documents things
 # is basically groupwise. So lets be explicit
 autodoc_member_order = "groupwise"
 
-# Show type-hints in both the signature
-# and in the variable list
-autodoc_typehints = "signature"
+# Do not evaluate things that are defaulted in arguments.
+# Show them *as-is*.
+autodoc_preserve_defaults = True
+
+# Show type-hints in only the description, in this way the
+# signature is readable and the argument order can easily
+# be inferred.
+autodoc_typehints = "description"
 
 # typehints only shows the minimal class, instead
 # of full module paths
@@ -250,24 +284,20 @@ autodoc_typehints = "signature"
 # autodoc will likely get a rewrite. Until then..
 autodoc_typehints_format = "short"
 
-# Do not evaluate things that are defaulted in arguments.
-# Show them *as-is*.
-autodoc_preserve_defaults = True
-
 # Automatically create the autodoc_type_aliases
 # This is handy for commonly used terminologies.
 # It currently puts everything into a `<>` which
-# is sub-optimal (i.e. one cannot do "`umpy.ndarray` or `any`")
+# is sub-optimal (i.e. one cannot do "`numpy.ndarray` or `any`")
 # Perhaps just a small tweak and it works.
 autodoc_type_aliases = {
     # general terms
-    "array-like": "numpy.ndarray",
-    "array_like": "numpy.ndarray",
-    "int-like": "int or numpy.ndarray",
-    "float-like": "float or numpy.ndarray",
+    "array-like": "~numpy.ndarray",
+    "array_like": "~numpy.ndarray",
+    "int-like": "int or ~numpy.ndarray",
+    "float-like": "float or ~numpy.ndarray",
     "sequence": "sequence",
-    "np.ndarray": "numpy.ndarray",
-    "ndarray": "numpy.ndarray",
+    "np.ndarray": "~numpy.ndarray",
+    "ndarray": "~numpy.ndarray",
 }
 _type_aliases_skip = set()
 
@@ -276,28 +306,37 @@ def has_under(name: str):
     return name.startswith("_")
 
 
-def has_no_under(name: str):
-    return not has_under(name)
+# Retrive all typings
+try:
+    from numpy.typing import __all__ as numpy_types
+except ImportError:
+    numpy_types = []
+try:
+    from sisl.typing import __all__ as sisl_types
+except ImportError:
+    sisl_types = []
 
-
-for name in filter(has_no_under, dir(np.typing)):
+for name in numpy_types:
     if name in _type_aliases_skip:
         continue
-    autodoc_type_aliases[f"npt.{name}"] = f"numpy.typing.{name}"
+    autodoc_type_aliases[f"npt.{name}"] = f"~numpy.typing.{name}"
 
 
-for name in filter(has_no_under, dir(sisl.typing)):
+for name in sisl_types:
     if name in _type_aliases_skip:
         continue
 
     # sisl typing should be last, in this way we ensure
     # that sisl typing is always preferred
-    autodoc_type_aliases[name] = f"sisl.typing.{name}"
+    autodoc_type_aliases[name] = f"~sisl.typing.{name}"
 
+# just for ease...
+napoleon_type_aliases = autodoc_type_aliases
 
 # List of patterns, relative to source directory, that match files and
 # directories to ignore when looking for source files.
 exclude_patterns = [
+    "template.rst",
     "build",
     "_build",
     "**/setupegg.py",
@@ -332,7 +371,15 @@ add_function_parentheses = False
 show_authors = False
 
 # A list of ignored prefixes for module index sorting.
-modindex_common_prefix = ["sisl."]
+modindex_common_prefix = [
+    "sisl.",
+    "sisl.geom",
+    "sisl.physics",
+    "sisl.viz",
+    "sisl.unit",
+    "sisl.typing",
+    "sisl.shape",
+]
 
 # If true, `todo` and `todoList` produce output, else they produce nothing.
 todo_include_todos = False
@@ -405,23 +452,18 @@ latex_documents = [
 # Custom sisl documentation stuff down here
 #####
 
-# These two options should solve the "toctree contains reference to nonexisting document"
-# problem.
-# See here: numpydoc #69
-# class_members_toctree = False
-# If this is false we do not have double method sections
-# numpydoc_show_class_members = False
-
-# Attributes section will be formatted as methods
-numpydoc_attributes_as_param_list = False
-
 # Plot directives for matplotlib
 plot_include_source = True
 plot_formats = [("png", 90)]
 plot_pre_code = """\
 import numpy as np
 import matplotlib.pyplot as plt
-import sisl as si"""
+import sisl as si
+import plotly.io as pio
+np.random.seed(123987)
+np.set_printoptions(precision=4, suppress=True)
+pio.renderers.default = "notebook_connected"
+"""
 
 
 # Define header content
@@ -431,20 +473,11 @@ header = f"""\
 .. ipython:: python
    :suppress:
 
-   import numpy as np
-   import sisl as si
-   import matplotlib.pyplot as plt
-
-   np.random.seed(123987)
-   np.set_printoptions(precision=4, suppress=True)
+{indent(plot_pre_code, "   ")}
 """
 
 # IPython executables
-ipython_execlines = [
-    "import numpy as np",
-    "import sisl as si",
-    "import matplotlib.pyplot as plt",
-]
+ipython_execlines = plot_pre_code.splitlines()
 
 html_context = {
     "github_user": "zerothi",
@@ -525,7 +558,7 @@ pybtex.plugin.register_plugin(
 pybtex.plugin.register_plugin("pybtex.style.formatting", "rev_year", RevYearPlain)
 
 # Tell nbsphinx to wait, at least X seconds for each cell
-nbsphinx_timeout = 600
+nbsphinx_timeout = 30
 
 # Insert a link to download the IPython notebook
 nbsphinx_prolog = r"""
@@ -901,7 +934,82 @@ class RemovePrefixAutosummary(Autosummary):
         return items
 
 
+def _setup_autodoc(app):
+    """Patch and fix autodoc so we get the correct formatting of the environment"""
+    from sphinx.ext import autodoc, autosummary
+    from sphinx.locale import _
+    from sphinx.util import typing
+
+    # These subsequent class and methods originate from mpi4py
+    # which is released under BSD-3 clause.
+    # All credits must go to mpi4py developers for their contribution!
+    def istypealias(obj, name):
+        if isinstance(obj, type):
+            return name != getattr(obj, "__name__", None)
+        return obj in (typing.Any,)
+
+    def istypevar(obj):
+        return isinstance(obj, typing.TypeVar)
+
+    class TypeDocumenter(autodoc.DataDocumenter):
+        objtype = "type"
+        directivetype = "data"
+        priority = autodoc.ClassDocumenter.priority + 1
+
+        @classmethod
+        def can_document_member(cls, member, membername, _isattr, parent):
+            return (
+                isinstance(parent, autodoc.ModuleDocumenter)
+                and parent.name == "sisl.typing"
+                and (istypevar(member) or istypealias(member, membername))
+            )
+
+        def add_directive_header(self, sig):
+            if istypevar(self.object):
+                obj = self.object
+                if not self.options.annotation:
+                    self.options.annotation = f' = TypeVar("{obj.__name__}")'
+            super().add_directive_header(sig)
+
+        def update_content(self, more_content):
+            obj = self.object
+            if istypevar(obj):
+                if obj.__covariant__:
+                    kind = _("Covariant")
+                elif obj.__contravariant__:
+                    kind = _("Contravariant")
+                else:
+                    kind = _("Invariant")
+                content = f"{kind} :class:`~typing.TypeVar`."
+                more_content.append(content, "")
+                more_content.append("", "")
+            if istypealias(obj, self.name):
+                content = _("alias of %s") % typing.restify(obj)
+                more_content.append(content, "")
+                more_content.append("", "")
+            super().update_content(more_content)
+
+        def get_doc(self, *args, **kwargs):
+            obj = self.object
+            if istypevar(obj):
+                if obj.__doc__ == typing.TypeVar.__doc__:
+                    return []
+            return super().get_doc(*args, **kwargs)
+
+    # Ensure the data-type gets parsed as a role.
+    # This will make the Type definitions print like a class
+    # which gives more space than the simpler table with very
+    # limited entry-space.
+    from sphinx.domains.python import PythonDomain
+
+    PythonDomain.object_types["data"].roles += ("class",)
+
+    app.add_autodocumenter(TypeDocumenter)
+
+
 def setup(app):
     # Setup autodoc skipping
+    _setup_autodoc(app)
+
     app.connect("autodoc-skip-member", sisl_skip)
     app.add_directive("autosummary", RemovePrefixAutosummary, override=True)

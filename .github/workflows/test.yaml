@@ -14,11 +14,11 @@ on:
     branches: [main]
     paths:
       - '**.py'
-      - '**.ipynb'
+      - '**.pyx'
   pull_request:
     paths:
       - '**.py'
-      - '**.ipynb'
+      - '**.pyx'
   schedule:
     # only once every 4 days
     # We can always force run this.
@@ -33,10 +33,14 @@ on:
         description: 'Which marks to test'
         required: false
         default: ''
-      verbose:
-        description: 'Run pytest with -vvv'
+      install_args:
+        description: 'Add additional installation args'
         required: false
-        type: boolean
+        default: '-v'
+      test_args:
+        description: 'Add additional test args'
+        required: false
+        default: '-v'
 
 jobs:
 
@@ -64,19 +68,19 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        python-version: ['3.9', '3.12']
+        python-version: ['3.9', '3.13']
         full-test: [true, false]
         minimal-dep: [true, false]
-        os: [ubuntu-latest, macos-12, macos-14]
+        os: [ubuntu-latest, macos-13, macos-latest]
         exclude:
-          # only full test suite on 3.12
-          - python-version: '3.12'
+          # only full test suite on 3.13
+          - python-version: '3.13'
             full-test: false
-          # no minimal dependency on 3.12
-          - python-version: '3.12'
+          # no minimal dependency on 3.13
+          - python-version: '3.13'
             minimal-dep: true
           # minimal dependency on ARM does not make sense (wheels not present)
-          - os: macos-14
+          - os: macos-latest
             minimal-dep: true
           # only run full test suite for minimal-dependency checks
           - full-test: false
@@ -140,7 +144,9 @@ jobs:
         CC: gcc
         FC: gfortran
       run: |
-        python -m pip install --progress-bar=off -v .[${{ steps.info.outputs.sisl_extras }}] \
+        python -m pip install --progress-bar=off \
+          ${{ github.event.inputs.install_args }} \
+          .[${{ steps.info.outputs.sisl_extras }}] \
           ${{ steps.info.outputs.sisl_install_packages }}
 
     - name: sisl debug info
@@ -151,6 +157,8 @@ jobs:
       run: |
         sgeom --help
         stoolbox atom-plot --help
+        # This should detect if the fortran sources are *correct*
+        python3 -c 'import sisl.io.siesta._siesta'
 
     - name: sisl tests
       env:
@@ -164,9 +172,6 @@ jobs:
         else
          ADD_FLAGS="-m ${{ github.event.inputs.marks }}"
         fi
-        if [[ "${{ github.event.inputs.verbose }}" == "true" ]]; then
-         ADD_FLAGS="$ADD_FLAGS -vvv"
-        fi
         ADD_TOOLS=""
         for tool in btd models ; do
           ADD_TOOLS="$ADD_TOOLS sisl_toolbox.$tool"
@@ -178,12 +183,14 @@ jobs:
           ADD_TOOLS="$ADD_TOOLS sisl_toolbox.transiesta.$tool"
         done
         # Try to enable code-coverage in the tests
-        coverage run -m pytest --pyargs sisl $ADD_FLAGS $ADD_TOOLS
+        coverage run -m pytest --pyargs sisl \
+          ${{ github.event.inputs.test_args }} \
+          $ADD_FLAGS $ADD_TOOLS
         ls -al
 
     - name: Upload code-coverage
       if: ${{ github.event.inputs.marks == '' }}
-      uses: codecov/codecov-action@v4
+      uses: codecov/codecov-action@v5
       with:
         verbose: true
         token: ${{ secrets.CODECOV_TOKEN }}
